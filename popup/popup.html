@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
+</head>
+
+<body>
+  <div class="container">
+    <!-- Left Column: Tab List -->
+    <div class="sidebar">
+      <div class="header">
+        <h1>Sources</h1>
+        <div class="controls">
+          <label class="switch" title="Toggle 360° Mode">
+            <input type="checkbox" id="mode-toggle">
+            <span class="slider round"></span>
+          </label>
+          <button id="refresh" class="icon-btn" title="Refresh">↻</button>
+        </div>
+      </div>
+      <div id="tab-list" class="tab-list">
+        <div class="loading">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Right Column: Radar UI -->
+    <div class="main-content">
+      <div class="radar-container" id="radar-container">
+        <div class="radar-background">
+          <!-- Concentric circles -->
+          <div class="circle c1"></div>
+          <div class="circle c2"></div>
+          <div class="circle c3"></div>
+          <!-- Axes -->
+          <div class="axis v"></div>
+          <div class="axis h"></div>
+        </div>
+        <div class="user-center">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M12 12C14.21 12 16 10.21 16 8C16 5.79 14.21 4 12 4C9.79 4 8 5.79 8 8C8 10.21 9.79 12 12 12ZM12 14C9.33 14 4 15.34 4 18V20H20V18C20 15.34 14.67 14 12 14Z"
+              fill="currentColor" />
+          </svg>
+        </div>
+        <!-- Dots will be injected here via JS -->
+      </div>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+
+</html>
