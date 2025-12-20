@@ -24,6 +24,15 @@ class PopupApp {
     this.RADAR_RADIUS = 100;
     this.CENTER_X = 140;
     this.CENTER_Y = 140;
+
+    // Throttled message sender
+    this.throttledSendMessage = this.throttle((tabId, angle) => {
+      chrome.runtime.sendMessage({
+        type: "SET_ANGLE",
+        tabId: tabId,
+        angle: angle
+      });
+    }, 50); // 50ms throttle
   }
 
   init() {
@@ -91,6 +100,7 @@ class PopupApp {
     this.currentTabs.forEach(tab => {
       const item = document.createElement('div');
       item.className = `tab-item ${this.selectedTabId === tab.id ? 'selected' : ''}`;
+      item.dataset.tabId = tab.id; // Identifier for direct update
       item.onclick = () => this.selectTab(tab.id);
 
       const title = document.createElement('div');
@@ -117,6 +127,7 @@ class PopupApp {
     this.currentTabs.forEach(tab => {
       const dot = document.createElement('div');
       dot.className = `audio-dot ${this.selectedTabId === tab.id ? 'selected' : ''}`;
+      dot.dataset.tabId = tab.id; // Identifier for direct update
       const angleVal = this.tabAngles[tab.id] || 0;
       dot.title = `${tab.title} (${Math.round(angleVal)}°)`;
 
@@ -155,7 +166,7 @@ class PopupApp {
   stopDragging() {
     this.isDragging = false;
     this.draggingTabId = null;
-    this.render();
+    this.render(); // Final consistency check
 
     // Persist state now that drag is done
     chrome.runtime.sendMessage({ type: "PERSIST_STATE" });
@@ -171,13 +182,30 @@ class PopupApp {
     const newAngle = this.calculateAngleFromPosition(x, y);
     this.tabAngles[this.draggingTabId] = newAngle;
 
-    this.render(); // Smooth update
+    // Optimized Update: Direct DOM manipulation + Throttled IPC
+    this.updateUiForTab(this.draggingTabId);
+    this.throttledSendMessage(this.draggingTabId, newAngle);
+  }
 
-    chrome.runtime.sendMessage({
-      type: "SET_ANGLE",
-      tabId: this.draggingTabId,
-      angle: newAngle
-    });
+  // Direct DOM update to avoid full re-render
+  updateUiForTab(tabId) {
+    const angle = this.tabAngles[tabId] || 0;
+
+    // 1. Update List Item Text
+    const listItem = this.ui.tabList.querySelector(`.tab-item[data-tab-id="${tabId}"] .tab-meta`);
+    if (listItem) {
+      listItem.textContent = `${Math.round(angle)}°`;
+    }
+
+    // 2. Update Radar Dot Position
+    const dot = this.ui.radarContainer.querySelector(`.audio-dot[data-tab-id="${tabId}"]`);
+    if (dot) {
+      const pos = this.calculateDotPosition(angle);
+      dot.style.left = pos.x + 'px';
+      dot.style.top = pos.y + 'px';
+      // Update title tooltips if needed, but maybe skipping for perf is fine?
+      // dot.title = ... (Accessing tab title requires lookup, maybe skip for drag perf)
+    }
   }
 
   // --- Math ---
@@ -220,6 +248,21 @@ class PopupApp {
     }
     // If '360', no clamp (-180 to 180 is fine)
     return customDeg;
+  }
+
+  // --- Utils ---
+
+  throttle(func, limit) {
+    let inThrottle;
+    return function () {
+      const args = arguments;
+      const context = this;
+      if (!inThrottle) {
+        func.apply(context, args);
+        inThrottle = true;
+        setTimeout(() => inThrottle = false, limit);
+      }
+    }
   }
 }
 

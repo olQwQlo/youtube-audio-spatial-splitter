@@ -13,6 +13,46 @@ class AudioGraph {
     this.isAttached = false;
   }
 
+  _handleAutoplayPolicy() {
+    if (this.ctx.state === 'suspended') {
+      const resume = () => {
+        this.ctx.resume();
+        window.removeEventListener('click', resume);
+        window.removeEventListener('keydown', resume);
+      };
+      window.addEventListener('click', resume);
+      window.addEventListener('keydown', resume);
+    }
+  }
+
+  _attachLifecycleListeners() {
+    if (!this.videoElement) return;
+
+    // Suspend when paused or ended to save CPU
+    const onPause = () => {
+      // confirm video is actually paused (sometimes events fire oddly)
+      if (this.videoElement.paused && this.ctx && this.ctx.state === 'running') {
+        console.log("[Spatial Splitter] Suspending AudioContext (Video Paused)");
+        this.ctx.suspend();
+      }
+    };
+
+    // Resume when playing
+    const onPlay = () => {
+      if (this.ctx && this.ctx.state === 'suspended') {
+        console.log("[Spatial Splitter] Resuming AudioContext (Video Playing)");
+        this.ctx.resume();
+      }
+    };
+
+    this.videoElement.addEventListener('pause', onPause);
+    this.videoElement.addEventListener('ended', onPause);
+    this.videoElement.addEventListener('play', onPlay);
+
+    // Also hook into seeking, just in case
+    this.videoElement.addEventListener('seeking', onPlay);
+  }
+
   async init(video) {
     if (this.isAttached && this.videoElement === video) return;
 
@@ -37,6 +77,8 @@ class AudioGraph {
       this._connectGraph();
 
       this.videoElement = video;
+      this._attachLifecycleListeners(); // Attach listeners for suspend/resume
+
       this.isAttached = true;
       console.log("[Spatial Splitter] Audio graph constructed");
 
@@ -110,18 +152,6 @@ class AudioGraph {
 
     if (this.nodes.stereo) {
       this.nodes.stereo.pan.setTargetAtTime(pan, this.ctx.currentTime, 0.1);
-    }
-  }
-
-  _handleAutoplayPolicy() {
-    if (this.ctx.state === 'suspended') {
-      const resume = () => {
-        this.ctx.resume();
-        window.removeEventListener('click', resume);
-        window.removeEventListener('keydown', resume);
-      };
-      window.addEventListener('click', resume);
-      window.addEventListener('keydown', resume);
     }
   }
 }
