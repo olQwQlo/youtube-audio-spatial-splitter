@@ -1,41 +1,120 @@
 // Background Service Worker
 
-// State
-let activeVideoTabs = new Set(); // tabIds that are audible and on YouTube
-let tabAngles = new Map(); // tabId -> angle (degrees), default 0
-let audioMode = 'stereo'; // 'stereo' | '360'
+class StateManager {
+  constructor() {
+    this.activeVideoTabs = new Set();
+    this.tabAngles = new Map();
+    this.audioMode = 'stereo';
 
-// --- Storage & Initialization ---
+    this.STORAGE_KEY_ANGLES = 'tabAngles';
+    this.STORAGE_KEY_MODE = 'audioMode';
+  }
 
-async function loadState() {
-  const data = await chrome.storage.local.get(['tabAngles', 'audioMode']);
-  if (data.tabAngles) {
-    // Convert object back to Map (keys are strings in JSON)
-    for (const [key, value] of Object.entries(data.tabAngles)) {
-      tabAngles.set(parseInt(key), value);
+  async init() {
+    await this._load();
+
+    // Re-scan tabs to recover active state
+    const tabs = await chrome.tabs.query({ url: "*://*.youtube.com/*" });
+    for (const tab of tabs) {
+      this.checkAndTrack(tab);
     }
   }
-  if (data.audioMode) {
-    audioMode = data.audioMode;
+
+  async _load() {
+    const data = await chrome.storage.local.get([this.STORAGE_KEY_ANGLES, this.STORAGE_KEY_MODE]);
+    if (data[this.STORAGE_KEY_ANGLES]) {
+      for (const [key, value] of Object.entries(data[this.STORAGE_KEY_ANGLES])) {
+        this.tabAngles.set(parseInt(key), value);
+      }
+    }
+    if (data[this.STORAGE_KEY_MODE]) {
+      this.audioMode = data[this.STORAGE_KEY_MODE];
+    }
   }
 
-  // Re-scan for active tabs
-  const tabs = await chrome.tabs.query({ url: "*://*.youtube.com/*" });
-  for (const tab of tabs) {
-    checkAndTrackTab(tab);
+  _save() {
+    const anglesObj = Object.fromEntries(this.tabAngles);
+    chrome.storage.local.set({
+      [this.STORAGE_KEY_ANGLES]: anglesObj,
+      [this.STORAGE_KEY_MODE]: this.audioMode
+    });
+  }
+
+  checkAndTrack(tab) {
+    if (!tab) return;
+    const isYT = tab.url && (tab.url.includes("youtube.com") || tab.url.includes("youtu.be"));
+    const isAudible = tab.audible;
+
+    if (isYT) {
+      // Add if audible. If already tracked, keep tracking even if paused (not audible).
+      if (isAudible || this.activeVideoTabs.has(tab.id)) {
+        if (!this.activeVideoTabs.has(tab.id)) {
+          this.activeVideoTabs.add(tab.id);
+          // Init angle if needed
+          if (!this.tabAngles.has(tab.id)) {
+            this.tabAngles.set(tab.id, 0);
+          }
+          this.broadcastStateToTab(tab.id);
+        }
+      }
+    } else {
+      this.removeTab(tab.id);
+    }
+  }
+
+  removeTab(tabId) {
+    if (this.activeVideoTabs.has(tabId)) {
+      this.activeVideoTabs.delete(tabId);
+      // We can choose to keep angle config or delete it.
+      // Current strict logic: delete.
+      this.tabAngles.delete(tabId);
+      this._save();
+    }
+  }
+
+  setAngle(tabId, angle) {
+    if (this.activeVideoTabs.has(tabId)) {
+      this.tabAngles.set(tabId, angle);
+      this.broadcastStateToTab(tabId);
+      this._save();
+    }
+  }
+
+  setMode(mode) {
+    this.audioMode = mode;
+    this._save();
+    // Broadcast to all
+    for (const tabId of this.activeVideoTabs) {
+      this.broadcastStateToTab(tabId);
+    }
+  }
+
+  getStatus() {
+    return {
+      activeVideoTabs: Array.from(this.activeVideoTabs),
+      tabAngles: Object.fromEntries(this.tabAngles),
+      audioMode: this.audioMode
+    };
+  }
+
+  async broadcastStateToTab(tabId) {
+    const angle = this.tabAngles.get(tabId) || 0;
+    try {
+      await chrome.tabs.sendMessage(tabId, {
+        type: "APPLY_STATE",
+        angle: angle,
+        mode: this.audioMode
+      });
+    } catch (e) {
+      // Tab might be loading or closed
+    }
   }
 }
 
-function saveState() {
-  const anglesObj = Object.fromEntries(tabAngles);
-  chrome.storage.local.set({
-    tabAngles: anglesObj,
-    audioMode: audioMode
-  });
-}
+// --- Main Execution ---
 
-// Initialize on start
-loadState();
+const stateManager = new StateManager();
+stateManager.init();
 
 // --- Event Listeners ---
 
@@ -45,148 +124,56 @@ loadState();
 // Adding an empty fetch listener can sometimes stabilize this,
 // though technically Manifest V3 handles fetches differently.
 // However, the error usually indicates the worker was killed mid-request.
-self.addEventListener('fetch', (event) => {
+self.addEventListener('fetch', () => {
   // Pass-through
 });
 
 // Update Tab (Audible / URL / Status)
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' || changeInfo.audible !== undefined || changeInfo.url) {
-    checkAndTrackTab(tab);
+    stateManager.checkAndTrack(tab);
   }
 });
 
 // Remove Tab
 chrome.tabs.onRemoved.addListener((tabId) => {
-  activeVideoTabs.delete(tabId);
-  tabAngles.delete(tabId); // Clean up state
-  saveState();
+  stateManager.removeTab(tabId);
 });
 
 // Activate Tab - Just purely for tracking if we needed it, but for manual mode it's less critical
 // We keep tracking it to ensure state is consistent if needed
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
   const tab = await tryGetTab(activeInfo.tabId);
-  if (tab && isYouTubeTab(tab) && activeVideoTabs.has(activeInfo.tabId)) {
-    // Ensure angle is applied if needed
-    applyStateToTab(activeInfo.tabId);
+  if (tab) {
+    stateManager.checkAndTrack(tab); // Refresh state
+    // Force update to ensure sound is right
+    if (stateManager.activeVideoTabs.has(activeInfo.tabId)) {
+      stateManager.broadcastStateToTab(activeInfo.tabId);
+    }
   }
 });
 
 // Messages
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "GET_STATUS") {
-    // If we just woke up and haven't scanned yet, we might return empty.
-    // But loadState() is async. Popup handles 'Loading...' UI?
-    // Let's rely on activeVideoTabs logic.
-    const anglesObj = Object.fromEntries(tabAngles);
-    sendResponse({
-      activeVideoTabs: Array.from(activeVideoTabs),
-      tabAngles: anglesObj,
-      audioMode: audioMode
-    });
+    sendResponse(stateManager.getStatus());
   }
   else if (message.type === "SET_ANGLE") {
-    const { tabId, angle } = message;
-    if (activeVideoTabs.has(tabId)) {
-      tabAngles.set(tabId, angle);
-      applyStateToTab(tabId);
-      saveState();
-    }
+    stateManager.setAngle(message.tabId, message.angle);
   }
   else if (message.type === "SET_MODE") {
-    audioMode = message.mode;
-    saveState();
-    // Broadcast new mode to all active tabs
-    for (const tabId of activeVideoTabs) {
-      applyStateToTab(tabId);
-    }
+    stateManager.setMode(message.mode);
   }
   else if (message.type === "CONTENT_Script_READY") {
     if (sender.tab) {
-      checkAndTrackTab(sender.tab);
-      applyStateToTab(sender.tab.id);
+      stateManager.checkAndTrack(sender.tab);
+      stateManager.broadcastStateToTab(sender.tab.id);
     }
   }
   return true; // Keep channel open for async response if needed
 });
 
-// --- Logic ---
-
-function isYouTubeTab(tab) {
-  return tab.url && (tab.url.includes("youtube.com") || tab.url.includes("youtu.be"));
-}
-
-function checkAndTrackTab(tab) {
-  if (!tab) return;
-
-  const isYT = isYouTubeTab(tab);
-  const isAudible = tab.audible;
-
-  // Track if audible OR if we have a saved angle for it (meaning user manually set it)
-  // Logic: 
-  // - If it's YouTube AND Audible -> Track it.
-  // - If it's YouTube AND NOT Audible BUT matches a known active tab -> Keep tracking unless closed?
-  // Problem: Non-audible tabs (paused) might want to be kept in the list?
-  // User says "disappear from popup menu". If paused, 'audible' goes false.
-  // We should probably keep tracking if it's YouTube and we've seen it play before, 
-  // OR rely on content script telling us it's ready.
-  // Maybe only list if Content Script says "I have a video element".
-  // The current content script sends CONTENT_Script_READY when initialized.
-  // Let's trust that signal heavily.
-
-  // Strategy:
-  // 1. If we see a YT tab that is audible, add it.
-  // 2. If a tracked tab becomes non-audible, KEEP it in the list (don't delete) until it's closed or navigated away.
-
-  if (isYT) {
-    if (isAudible) {
-      if (!activeVideoTabs.has(tab.id)) {
-        activeVideoTabs.add(tab.id);
-        // Initialize angle if not present
-        if (!tabAngles.has(tab.id)) {
-          tabAngles.set(tab.id, 0);
-        }
-        applyStateToTab(tab.id);
-      }
-    } else {
-      // It's YT but not audible.
-      // If it was already active, we keep it active.
-      // This solves "paused video disappears".
-
-      // However, if we refresh extension, we scan tabs. If paused, isAudible is false.
-      // Then we won't add it.
-      // Fix: If we rely on ContentScriptReady, we add it regardless of audible?
-      // But we don't want to list EVERY YouTube tab (e.g. search results).
-      // Maybe only list if Content Script says "I have a video element".
-      // The current content script sends CONTENT_Script_READY when initialized.
-      // Let's trust that signal heavily.
-    }
-  } else {
-    // Not YouTube anymore
-    if (activeVideoTabs.has(tab.id)) {
-      activeVideoTabs.delete(tab.id);
-      // Don't delete angles immediately, maybe user navigates back?
-      // But for now clear it to be clean.
-      // tabAngles.delete(tab.id); 
-      // saveState();
-    }
-  }
-}
-
-async function applyStateToTab(tabId) {
-  const angle = tabAngles.get(tabId) || 0;
-  try {
-    await chrome.tabs.sendMessage(tabId, {
-      type: "APPLY_STATE",
-      angle: angle,
-      mode: audioMode
-    });
-  } catch (e) {
-    // Content script might not be ready
-  }
-}
-
+// Helper
 async function tryGetTab(tabId) {
   try {
     return await chrome.tabs.get(tabId);
