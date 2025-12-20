@@ -137,8 +137,9 @@ chrome.runtime.sendMessage({ type: "CONTENT_Script_READY" });
 scanForVideo();
 
 // Observer
-const observer = new MutationObserver(() => scanForVideo());
-observer.observe(document.body, { childList: true, subtree: true });
+// Polling changed (checks once every 1s)
+// This reduces CPU load to near zero
+setInterval(() => scanForVideo(), 1000);
 
 function scanForVideo() {
   const video = document.querySelector("video");

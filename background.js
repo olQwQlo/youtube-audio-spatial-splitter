@@ -76,7 +76,7 @@ class StateManager {
     if (this.activeVideoTabs.has(tabId)) {
       this.tabAngles.set(tabId, angle);
       this.broadcastStateToTab(tabId);
-      this._save();
+      // this._save(); // Removed for performance. Save only on drag end.
     }
   }
 
@@ -163,6 +163,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   else if (message.type === "SET_MODE") {
     stateManager.setMode(message.mode);
+  }
+  else if (message.type === "PERSIST_STATE") {
+    stateManager._save();
   }
   else if (message.type === "CONTENT_Script_READY") {
     if (sender.tab) {

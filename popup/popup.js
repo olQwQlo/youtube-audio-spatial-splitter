@@ -153,10 +153,12 @@ class PopupApp {
   }
 
   stopDragging() {
-    if (!this.isDragging) return;
     this.isDragging = false;
     this.draggingTabId = null;
     this.render();
+
+    // Persist state now that drag is done
+    chrome.runtime.sendMessage({ type: "PERSIST_STATE" });
   }
 
   handleDrag(e) {
