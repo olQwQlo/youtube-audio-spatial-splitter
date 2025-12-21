@@ -1,7 +1,8 @@
 :root {
   --bg-color: #1a1b1e;
   --sidebar-bg: #25262b;
-  --accent-color: #00e5ff; /* Cyan neon */
+  --accent-color: #00e5ff;
+  /* Cyan neon */
   --text-primary: #e0e0e0;
   --text-secondary: #a0a0a0;
   --border-color: #373a40;
@@ -50,9 +51,9 @@ h1 {
 }
 
 .controls {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Switch Toggle */
@@ -63,7 +64,7 @@ h1 {
   height: 18px;
 }
 
-.switch input { 
+.switch input {
   opacity: 0;
   width: 0;
   height: 0;
@@ -72,7 +73,10 @@ h1 {
 .slider {
   position: absolute;
   cursor: pointer;
-  top: 0; left: 0; right: 0; bottom: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   background-color: var(--border-color);
   transition: .4s;
   border-radius: 18px;
@@ -90,11 +94,11 @@ h1 {
   border-radius: 50%;
 }
 
-input:checked + .slider {
+input:checked+.slider {
   background-color: var(--accent-color);
 }
 
-input:checked + .slider:before {
+input:checked+.slider:before {
   transform: translateX(14px);
 }
 
@@ -174,7 +178,10 @@ input:checked + .slider:before {
 
 .radar-background {
   position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   pointer-events: none;
 }
 
@@ -182,27 +189,52 @@ input:checked + .slider:before {
   border: 1px solid rgba(0, 229, 255, 0.1);
   border-radius: 50%;
   position: absolute;
-  top: 50%; left: 50%;
+  top: 50%;
+  left: 50%;
   transform: translate(-50%, -50%);
 }
-.c1 { width: 33%; height: 33%; }
-.c2 { width: 66%; height: 66%; }
-.c3 { width: 100%; height: 100%; border-color: rgba(0, 229, 255, 0.3); }
+
+.c1 {
+  width: 33%;
+  height: 33%;
+}
+
+.c2 {
+  width: 66%;
+  height: 66%;
+}
+
+.c3 {
+  width: 100%;
+  height: 100%;
+  border-color: rgba(0, 229, 255, 0.3);
+}
 
 .axis {
   position: absolute;
   background: rgba(0, 229, 255, 0.1);
-  top: 50%; left: 50%;
+  top: 50%;
+  left: 50%;
   transform: translate(-50%, -50%);
 }
-.v { width: 1px; height: 100%; }
-.h { width: 100%; height: 1px; }
+
+.v {
+  width: 1px;
+  height: 100%;
+}
+
+.h {
+  width: 100%;
+  height: 1px;
+}
 
 .user-center {
   position: absolute;
-  top: 50%; left: 50%;
+  top: 50%;
+  left: 50%;
   transform: translate(-50%, -50%);
-  width: 40px; height: 40px;
+  width: 40px;
+  height: 40px;
   background: #25262b;
   border: 2px solid var(--accent-color);
   border-radius: 50%;
@@ -217,14 +249,16 @@ input:checked + .slider:before {
 /* Draggable Dot */
 .audio-dot {
   position: absolute;
-  width: 16px; height: 16px;
+  width: 16px;
+  height: 16px;
   background: white;
   border-radius: 50%;
-  transform: translate(-50%, -50%); /* Center the dot on the coordinates */
+  transform: translate(-50%, -50%);
+  /* Center the dot on the coordinates */
   cursor: grab;
   z-index: 20;
   transition: box-shadow 0.2s;
-  box-shadow: 0 0 8px rgba(255,255,255,0.4);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
 }
 
 .audio-dot:hover {
@@ -241,9 +275,45 @@ input:checked + .slider:before {
   border: 2px solid white;
 }
 
-.loading, .empty-state, .error {
+.loading,
+.empty-state,
+.error {
   color: var(--text-secondary);
   font-size: 12px;
   text-align: center;
   margin-top: 40px;
+}
+
+/* Sidebar Footer removed - Button moved to main area */
+
+.bmc-button {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background-color: transparent;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  width: auto;
+  /* Fit content */
+}
+
+.bmc-button:hover {
+  background-color: rgba(255, 221, 0, 0.1);
+  color: #FFDD00;
+  text-shadow: 0 0 8px rgba(255, 221, 0, 0.4);
+  transform: translateY(-1px);
+}
+
+.bmc-button:active {
+  transform: translateY(0);
 }

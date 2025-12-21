@@ -1,60 +1,60 @@
-# YouTube Audio Spatial Splitter
+# YouTube Audio Spatial Splitter 🎧✨
 
-YouTubeの音声を空間的に配置し、複数の動画を同時に再生しても聞き分けやすくするChrome拡張機能です。
-作業用BGM、ニュースの並行視聴、あるいはASMRのような没入感のある体験を自分好みにカスタマイズできます。
+**Become the DJ of your browser tabs!**
+
+Ever wanted to watch a game stream, listen to lofi beats, and catch up on news *all at the same time* without your ears bleeding? Now you can!
+This extension lets you **spatially arrange** your YouTube tabs around you. Put the beats in the back, the game on the left, and the news on the right. It's like having a surround sound setup for your browser.
 
 ![UI Sample](assets/ui_sample.png)
 
-## 主な機能
+## 🚀 Key Features
 
-*   **空間オーディオ配置 (Spatial Audio)**
-    *   ブラウザ上のYouTubeタブの音声を、Web Audio APIを用いて空間的に配置します。
-    *   複数の動画が再生されていても、位置が異なるため聞き分けが容易になります。
+*   **Spatial Audio Magic**: We use the Web Audio API to place sound in 3D space. It makes distinguishing multiple audio sources surprisingly easy!
+*   **Radar Control UI**: Drag and drop your audio sources on a cool radar interface. You are the dot in the center. Configure your soundscape like a pro.
+*   **Two Audio Modes**:
+    *   **Stereo Mode**: Crisp left-right separation. Great for casual multi-tasking.
+    *   **360° Mode**: Full 3D HRTF audio. Put sounds *behind* you for maximum immersion (requires headphones for best effect).
+*   **Auto-Save**: Your perfect layout is saved automatically. Close the browser, come back, and your soundstage is ready.
 
-*   **手動コントロール (Manual Control)**
-    *   ポップアップの円形・レーダーUIを使って、各タブの音源位置をドラッグ＆ドロップで自由に移動できます。
-    *   中心がリスナー（あなた）の位置です。
+## 📥 How to Install
 
-*   **2つのオーディオモード**
-    *   **Stereo Mode (通常)**: 前方180度（左右）のクリアなステレオ配置。一般的なリスニングに適しています。
-    *   **360° Mode (全方位)**: HRTF（頭部伝達関数）を用いた3D音響。背後を含む全方位への配置が可能になり、より没入感のある配置が楽しめます。
+This isn't on the store yet (too cool for school), so you'll need to install it manually:
 
-*   **設定の自動保存**
-    *   タブごとの配置位置や、選択したモードは自動的に保存されます。
-    *   ブラウザを閉じても、再度開いたときに設定が復元されます。
+1.  **Clone or Download** this repository.
+2.  Open Chrome and go to `chrome://extensions/`.
+3.  Flip the **"Developer mode"** switch in the top right.
+4.  Click **"Load unpacked"**.
+5.  Select the folder where you downloaded this extension (the one with `manifest.json`).
 
-## インストール方法
+## 🎮 How to Use
 
-本拡張機能はChromeウェブストアには公開されていないため、開発者モードでインストールする必要があります。
+1.  **Open YouTube**: Start playing videos in different tabs. The more the merrier!
+2.  **Open the Popup**: Click the extension icon.
+3.  **Drag the Dots**: Move the dots on the radar. Right goes to right ear, left goes to left ear.
+4.  **Toggle Modes**: Switch to "360°" and drag a dot *below* the center line to hear it from behind you! 🤯
 
-1.  このリポジトリをクローンまたはダウンロードします。
-2.  Google Chromeを開き、アドレスバーに `chrome://extensions/` と入力します。
-3.  右上の **「デベロッパーモード」** スイッチをオンにします。
-4.  **「パッケージ化されていない拡張機能を読み込む」** をクリックします。
-5.  ダウンロードしたフォルダ（`manifest.json` が含まれているフォルダ）を選択します。
+## ☕ Support the Dev
 
-## 使い方
+This is a small passion project, built and maintained in my spare time — and yes, powered by coffee ☕
+If you enjoy this extension, consider fueling my next coding session!
+There's a shiny **Support button** inside the extension's popup, or you can click right here:
 
-1.  **YouTubeを開く**: 任意のタブでYouTube動画を開き、再生を開始します。複数のタブで開くと効果がわかりやすくなります。
-2.  **ポップアップを開く**: ツールバーの拡張機能アイコンをクリックします。
-3.  **位置を調整する**:
-    *   レーダー上のドット（音源）をドラッグして、好きな位置に移動させます。
-    *   右に行けば右耳から、左に行けば左耳から聞こえるようになります。
-4.  **モード変更**:
-    *   右上のトグルスイッチで「Stereo」と「360°」を切り替えます。
-    *   360°モードでは、ドットを中心より下（背後）に配置することで、後ろから音が聞こえるような効果が得られます。
+[<img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 48px !important;width: 174px !important;" >](https://buymeacoffee.com/olQwQlo)
 
-## 技術スタック
+## 🛠️ Tech Stack
 
-*   **Manifest V3**: 最新のChrome拡張機能仕様に準拠。
-*   **Web Audio API**:
-    *   `StereoPannerNode`: 高品質な左右パンニングに使用。
-    *   `PannerNode (HRTF)`: 3D空間オーディオの実現に使用。
-*   **Vanilla JS**: フレームワーク不使用の軽量設計。
+*   **Manifest V3**: Bleeding edge Chrome extension tech.
+*   **Web Audio API**: `StereoPannerNode` & `PannerNode` for the audio wizardry.
+*   **Vanilla JS**: No bloat, just speed.
 
-## 権限について
+## 🔒 Permissions
 
-*   `tabs`: YouTubeタブの検出と制御に使用します。
-*   `storage`: 音源位置やモード設定の保存に使用します。
-*   `scripting`: ページ内での音声制御スクリプトの実行に使用します。
-*   `host_permissions`: `*://*.youtube.com/*` (YouTube上でのみ動作します)。
+*   `tabs` & `scripting`: To hook into the audio.
+*   `storage`: To remember where you put things.
+*   `host_permissions`: Only runs on `*://*.youtube.com/*`.
+
+User data? We don't want it. Everything stays in your browser.
+
+---
+
+*Enjoy your new spatial superpowers!*
