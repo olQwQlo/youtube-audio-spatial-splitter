@@ -36,7 +36,7 @@ This isn't on the store yet (too cool for school), so you'll need to install it 
 ## ☕ Support the Dev
 
 This is a small passion project, built and maintained in my spare time — and yes, powered by coffee ☕
-If you enjoy this extension, consider fueling my next coding session!
+If this extension made your day a little better, consider fueling my next coding session!
 There's a shiny **Support button** inside the extension's popup, or you can click right here:
 
 [<img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 48px !important;width: 174px !important;" >](https://buymeacoffee.com/olQwQlo)
