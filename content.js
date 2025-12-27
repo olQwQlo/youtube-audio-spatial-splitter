@@ -12,7 +12,6 @@ class AudioGraph {
       lowShelf: null,  // [NEW] ASMR Bass
       highShelf: null  // [NEW] ASMR Detail
     };
-    this.mode = 'stereo'; // Global: 'stereo' | '360'
     this.panningMode = 'HRTF'; // Tab-specific: 'HRTF' (Binaural) | 'equalpower' (Speaker)
     this.videoElement = null;
     this.isAttached = false;
@@ -116,11 +115,7 @@ class AudioGraph {
     }
   }
 
-  setMode(newMode) {
-    if (this.mode === newMode) return;
-    this.mode = newMode;
-    this._connectGraph();
-  }
+
 
   // [NEW] Apply rich state
   applyState(degrees, radius, panningMode) {
@@ -133,17 +128,13 @@ class AudioGraph {
     }
 
     // [NEW] Binaural ASMR Effect
-    if (this.mode === '360' && this.panningMode === 'HRTF') {
+    if (this.panningMode === 'HRTF') {
       this._applyAsmrEffect(radius);
     } else {
       this._resetAsmrEffect();
     }
 
-    if (this.mode === '360') {
-      this._apply360(degrees, radius);
-    } else {
-      this._applyStereo(degrees);
-    }
+    this._apply360(degrees, radius);
   }
 
   // [NEW] Proximity EQ
@@ -211,24 +202,20 @@ class AudioGraph {
     try { this.nodes.hrtfR.disconnect(); } catch (e) { }
 
     // Connect based on mode
-    if (this.mode === '360') {
-      // Source -> LowShelf -> HighShelf -> Splitter -> Panners
-      this.source.connect(this.nodes.lowShelf);
-      this.nodes.lowShelf.connect(this.nodes.highShelf);
-      this.nodes.highShelf.connect(this.nodes.splitter);
+    // Source -> LowShelf -> HighShelf -> Splitter -> Panners
+    this.source.connect(this.nodes.lowShelf);
+    this.nodes.lowShelf.connect(this.nodes.highShelf);
+    this.nodes.highShelf.connect(this.nodes.splitter);
 
-      this.nodes.splitter.connect(this.nodes.hrtfL, 0);
-      this.nodes.splitter.connect(this.nodes.hrtfR, 1);
-      this.nodes.hrtfL.connect(this.ctx.destination);
-      this.nodes.hrtfR.connect(this.ctx.destination);
+    this.nodes.splitter.connect(this.nodes.hrtfL, 0);
+    this.nodes.splitter.connect(this.nodes.hrtfR, 1);
+    this.nodes.hrtfL.connect(this.ctx.destination);
+    this.nodes.hrtfR.connect(this.ctx.destination);
 
-      // Ensure attributes are correct for current panningMode
-      this._updatePannerAttributes();
-    } else {
-      this.source.connect(this.nodes.stereo);
-      this.nodes.stereo.connect(this.ctx.destination);
-    }
-    console.log(`[Spatial Splitter] Global Mode: ${this.mode}`);
+    // Ensure attributes are correct for current panningMode
+    this._updatePannerAttributes();
+
+    console.log(`[Spatial Splitter] Audio Graph Connected (360 Only)`);
   }
 
   _apply360(degrees, radius = 1.0) {
@@ -256,15 +243,7 @@ class AudioGraph {
     if (this.nodes.hrtfR) setPosition(this.nodes.hrtfR, angleR, radius);
   }
 
-  _applyStereo(degrees) {
-    let pan = degrees / 90;
-    if (pan < -1) pan = -1;
-    if (pan > 1) pan = 1;
 
-    if (this.nodes.stereo) {
-      this.nodes.stereo.pan.setTargetAtTime(pan, this.ctx.currentTime, 0.1);
-    }
-  }
 }
 
 // --- Main Execution ---
@@ -295,13 +274,6 @@ function scanForVideo() {
 // Messages
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "APPLY_STATE") {
-    // 1. Update Global Mode (Stereo/360)
-    if (message.globalMode) {
-      audioGraph.setMode(message.globalMode);
-    } else if (message.mode && (message.mode === 'stereo' || message.mode === '360')) {
-      // Legacy fallback if 'mode' contains global mode
-      audioGraph.setMode(message.mode);
-    }
 
     // 2. Update Tab State & Audio
     // message.mode might be 'speaker'/'binaural' now

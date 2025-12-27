@@ -4,11 +4,9 @@ class StateManager {
   constructor() {
     this.activeVideoTabs = new Set();
     this.tabStates = new Map(); // [NEW] Map<tabId, {angle, radius, mode}>
-    this.audioMode = 'stereo';
 
     this.STORAGE_KEY_STATES = 'tabStates'; // [NEW]
     this.STORAGE_KEY_ANGLES = 'tabAngles'; // Legacy
-    this.STORAGE_KEY_MODE = 'audioMode';
   }
 
   async init() {
@@ -22,7 +20,7 @@ class StateManager {
   }
 
   async _load() {
-    const data = await chrome.storage.local.get([this.STORAGE_KEY_STATES, this.STORAGE_KEY_ANGLES, this.STORAGE_KEY_MODE]);
+    const data = await chrome.storage.local.get([this.STORAGE_KEY_STATES, this.STORAGE_KEY_ANGLES]);
 
     // 1. Try load new states
     if (data[this.STORAGE_KEY_STATES]) {
@@ -36,17 +34,12 @@ class StateManager {
         this.tabStates.set(parseInt(key), { angle: angle, radius: 1.0, mode: 'speaker' });
       }
     }
-
-    if (data[this.STORAGE_KEY_MODE]) {
-      this.audioMode = data[this.STORAGE_KEY_MODE];
-    }
   }
 
   _save() {
     const statesObj = Object.fromEntries(this.tabStates);
     chrome.storage.local.set({
-      [this.STORAGE_KEY_STATES]: statesObj,
-      [this.STORAGE_KEY_MODE]: this.audioMode
+      [this.STORAGE_KEY_STATES]: statesObj
     });
   }
 
@@ -89,20 +82,12 @@ class StateManager {
     }
   }
 
-  setMode(mode) {
-    this.audioMode = mode;
-    this._save();
-    // Broadcast to all
-    for (const tabId of this.activeVideoTabs) {
-      this.broadcastStateToTab(tabId);
-    }
-  }
+
 
   getStatus() {
     return {
       activeVideoTabs: Array.from(this.activeVideoTabs),
-      tabStates: Object.fromEntries(this.tabStates),
-      audioMode: this.audioMode
+      tabStates: Object.fromEntries(this.tabStates)
     };
   }
 
@@ -113,8 +98,7 @@ class StateManager {
         type: "APPLY_STATE",
         angle: state.angle,
         radius: state.radius,
-        mode: state.mode,
-        globalMode: this.audioMode // Send global mode context too if needed
+        mode: state.mode
       });
     } catch (e) {
       // Tab might be loading or closed
@@ -164,9 +148,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   else if (message.type === "SET_ANGLE") { // [Legacy Support]
     stateManager.setState(message.tabId, { angle: message.angle });
   }
-  else if (message.type === "SET_MODE") {
-    stateManager.setMode(message.mode);
-  }
+
   else if (message.type === "PERSIST_STATE") {
     stateManager._save();
   }

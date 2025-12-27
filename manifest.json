@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "YouTube Audio Spatial Splitter",
-  "version": "0.1.0",
-  "description": "YouTubeの音声を空間的に分離する拡張機能",
+  "version": "1.0.0",
+  "description": "YouTubeの音声を左右に分離し、没入感のある空間オーディオ体験を提供する拡張機能。バイノーラル効果や音声位置の微調整が可能です。",
   "permissions": [
     "tabs",
     "activeTab",

@@ -37,7 +37,7 @@ This isn't on the store yet (too cool for school), so you'll need to install it 
 1.  **Open YouTube**: Start playing videos in different tabs. The more the merrier!
 2.  **Open the Popup**: Click the extension icon.
 3.  **Speaker Mode (Default)**: Drag dots around the rim to balance left/right separation.
-4.  **Switch to Binaural**: Click the speaker icon (🔈) next to a video to switch to headset mode (🎧).
+4.  **Binaural Mode**: Click the speaker icon (🔈) next to a video to switch to headset mode (🎧).
 5.  **Experience 3D**: in Binaural mode, drag the dot *behind* you or *right next to your center* to hear the ASMR proximity effect!
 
 ## ☕ Support the Dev

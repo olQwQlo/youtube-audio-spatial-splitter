@@ -7,7 +7,6 @@ class PopupApp {
     this.tabAngles = {}; // Legacy simple map, kept for safety but tabStates is source of truth
     this.tabStates = {}; // [NEW] { tabId: { angle, radius, mode } }
     this.selectedTabId = null;
-    this.audioMode = 'stereo';
 
     // Dragging state
     this.isDragging = false;
@@ -18,8 +17,7 @@ class PopupApp {
     this.ui = {
       tabList: document.getElementById('tab-list'),
       radarContainer: document.getElementById('radar-container'),
-      refreshBtn: document.getElementById('refresh'),
-      modeToggle: document.getElementById('mode-toggle')
+      refreshBtn: document.getElementById('refresh')
     };
 
     // Constants
@@ -47,7 +45,6 @@ class PopupApp {
 
   init() {
     this.ui.refreshBtn.addEventListener('click', () => this.refresh());
-    this.ui.modeToggle.addEventListener('change', (e) => this.toggleMode(e));
 
     // Radar interaction: MouseDown for seamless move+drag
     this.ui.radarContainer.addEventListener('mousedown', (e) => this.handleRadarBackgroundMouseDown(e));
@@ -80,7 +77,6 @@ class PopupApp {
       });
 
       this.audioMode = audioMode || 'stereo';
-      this.ui.modeToggle.checked = (this.audioMode === '360');
 
       this.currentTabs = [];
       for (const tabId of activeVideoTabs) {
@@ -99,12 +95,7 @@ class PopupApp {
     }
   }
 
-  async toggleMode(e) {
-    const is360 = e.target.checked;
-    this.audioMode = is360 ? '360' : 'stereo';
-    await chrome.runtime.sendMessage({ type: "SET_MODE", mode: this.audioMode });
-    this.render();
-  }
+
 
   toggleTabMode(tabId) {
     if (!this.tabStates[tabId]) return;
@@ -358,12 +349,6 @@ class PopupApp {
     if (customDeg > 180) customDeg -= 360;
     if (customDeg < -180) customDeg += 360;
 
-    // Constraints based on Mode
-    if (this.audioMode === 'stereo') {
-      // Clamp to -90...90 (Front hemisphere only)
-      if (customDeg < -90) customDeg = -90;
-      if (customDeg > 90) customDeg = 90;
-    }
     // If '360', no clamp (-180 to 180 is fine)
     return customDeg;
   }
