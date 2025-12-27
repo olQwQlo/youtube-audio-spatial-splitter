@@ -12,7 +12,7 @@ class AudioGraph {
       lowShelf: null,  // [NEW] ASMR Bass
       highShelf: null  // [NEW] ASMR Detail
     };
-    this.panningMode = 'HRTF'; // Tab-specific: 'HRTF' (Binaural) | 'equalpower' (Speaker)
+    this.panningMode = 'speaker'; // Unified: 'speaker' | 'binaural'
     this.videoElement = null;
     this.isAttached = false;
   }
@@ -68,7 +68,25 @@ class AudioGraph {
       this._handleAutoplayPolicy();
 
       // Create Source
-      this.source = this.ctx.createMediaElementSource(video);
+      // [FIX] hardening against re-initialization or "already connected" errors
+      try {
+        this.source = this.ctx.createMediaElementSource(video);
+      } catch (sourceError) {
+        // If execution reaches here, it usually means this video element
+        // already has a MediaSource attached.
+        // We can't reuse the old MediaSource if we lost reference to it,
+        // but we might be able to proceed if the context is valid.
+        // However, standard API doesn't allow getting existing source.
+        console.warn("[Spatial Splitter] MediaElementSource creation failed (already connected?):", sourceError);
+        // If we can't create source, we can't do anything for this specific video instance *if* we lost the previous source node.
+        // But if we are in a re-init loop, we might want to flag isAttached = true to stop retrying.
+        // For safety, let's treat this as a non-fatal error if we want to suppress the loop,
+        // but effectively correct behavior is 'we cannot process this video'.
+        // To prevent loop, we mark attached but we won't have audio processing.
+        this.videoElement = video;
+        this.isAttached = true;
+        return;
+      }
 
       // Create Processing Nodes
       this.nodes.stereo = this.ctx.createStereoPanner();
@@ -112,6 +130,8 @@ class AudioGraph {
 
     } catch (e) {
       console.error("[Spatial Splitter] Setup error:", e);
+      // In case of general failure, reset attached so we might try again if conditions change
+      this.isAttached = false;
     }
   }
 
@@ -128,7 +148,8 @@ class AudioGraph {
     }
 
     // [NEW] Binaural ASMR Effect
-    if (this.panningMode === 'HRTF') {
+    // [FIX] Checking against 'binaural' strictly
+    if (this.panningMode === 'binaural') {
       this._applyAsmrEffect(radius);
     } else {
       this._resetAsmrEffect();
@@ -166,6 +187,8 @@ class AudioGraph {
 
   _updatePannerAttributes() {
     const panners = [this.nodes.hrtfL, this.nodes.hrtfR];
+
+    // [FIX] internal state is now strictly 'speaker' or 'binaural'
     const isSpeaker = (this.panningMode === 'speaker');
 
     // Map 'speaker' -> 'equalpower', 'binaural' -> 'HRTF'
@@ -276,12 +299,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "APPLY_STATE") {
 
     // 2. Update Tab State & Audio
-    // message.mode might be 'speaker'/'binaural' now
-    // We treat 'message.mode' as panningMode if it is speaker/binaural
-    let panningMode = null;
-    if (message.mode === 'speaker' || message.mode === 'binaural') {
-      panningMode = message.mode;
-    }
+    // message.mode is coming from StateManager as 'speaker' or 'binaural'
+    const panningMode = (message.mode === 'speaker' || message.mode === 'binaural')
+      ? message.mode
+      : null;
 
     const radius = (typeof message.radius === 'number') ? message.radius : 1.0;
     const angle = (typeof message.angle === 'number') ? message.angle : 0;

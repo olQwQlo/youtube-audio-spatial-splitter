@@ -355,3 +355,58 @@ input:checked+.slider:before {
 .bmc-button:active {
   transform: translateY(0);
 }
+
+/* Radar Labels */
+.label {
+  position: absolute;
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.label-front {
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.label-back {
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.label-left {
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.label-right {
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* ASMR Hint */
+.asmr-hint {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--accent-color);
+  font-size: 11px;
+  background: rgba(0, 229, 255, 0.1);
+  padding: 4px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  white-space: nowrap;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+.asmr-hint.hidden {
+  opacity: 0;
+}

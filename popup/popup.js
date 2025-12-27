@@ -17,7 +17,8 @@ class PopupApp {
     this.ui = {
       tabList: document.getElementById('tab-list'),
       radarContainer: document.getElementById('radar-container'),
-      refreshBtn: document.getElementById('refresh')
+      refreshBtn: document.getElementById('refresh'),
+      asmrHint: document.getElementById('asmr-hint') // [NEW]
     };
 
     // Constants
@@ -120,6 +121,7 @@ class PopupApp {
   render() {
     this.renderList();
     this.renderRadar();
+    this.updateAsmrHint(); // [NEW]
   }
 
   renderList() {
@@ -204,6 +206,19 @@ class PopupApp {
 
       this.ui.radarContainer.appendChild(dot);
     });
+  }
+
+  updateAsmrHint() {
+    if (!this.selectedTabId || !this.tabStates[this.selectedTabId]) {
+      this.ui.asmrHint.classList.add('hidden');
+      return;
+    }
+    const state = this.tabStates[this.selectedTabId];
+    if (state.mode === 'binaural') {
+      this.ui.asmrHint.classList.remove('hidden');
+    } else {
+      this.ui.asmrHint.classList.add('hidden');
+    }
   }
 
   renderError(msg) {
@@ -313,6 +328,11 @@ class PopupApp {
       const pos = this.calculateDotPosition(state.angle, state.radius);
       dot.style.left = pos.x + 'px';
       dot.style.top = pos.y + 'px';
+    }
+
+    // 3. Update Hint
+    if (this.selectedTabId === tabId) {
+      this.updateAsmrHint();
     }
   }
 
