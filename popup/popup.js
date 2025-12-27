@@ -10,6 +10,7 @@ class PopupApp {
 
     // Dragging state
     this.isDragging = false;
+    this.hasDragged = false; // [NEW] Distinguish click vs drag
     this.draggingTabId = null;
 
     // DOM Elements
@@ -38,6 +39,9 @@ class PopupApp {
   init() {
     this.ui.refreshBtn.addEventListener('click', () => this.refresh());
     this.ui.modeToggle.addEventListener('change', (e) => this.toggleMode(e));
+
+    // Radar interaction: MouseDown for seamless move+drag
+    this.ui.radarContainer.addEventListener('mousedown', (e) => this.handleRadarBackgroundMouseDown(e));
 
     // Dragging
     document.addEventListener('mouseup', () => this.stopDragging());
@@ -135,10 +139,11 @@ class PopupApp {
       dot.style.left = pos.x + 'px';
       dot.style.top = pos.y + 'px';
 
-      dot.onmousedown = (e) => this.startDragging(e, tab.id);
-      dot.onclick = (e) => {
+      dot.onmousedown = (e) => {
+        // Prevent background handler from firing
+        // But allow startDragging to work
         e.stopPropagation();
-        this.selectTab(tab.id);
+        this.startDragging(e, tab.id);
       };
 
       this.ui.radarContainer.appendChild(dot);
@@ -158,22 +163,30 @@ class PopupApp {
 
   startDragging(e, tabId) {
     this.isDragging = true;
+    this.hasDragged = false; // Reset drag flag
     this.draggingTabId = tabId;
     this.selectTab(tabId);
     e.preventDefault();
   }
 
   stopDragging() {
+    // If was dragging, save state
+    if (this.isDragging) {
+      chrome.runtime.sendMessage({ type: "PERSIST_STATE" });
+    }
+
     this.isDragging = false;
     this.draggingTabId = null;
-    this.render(); // Final consistency check
 
-    // Persist state now that drag is done
-    chrome.runtime.sendMessage({ type: "PERSIST_STATE" });
+    // Note: We don't reset hasDragged here immediately because 'click' fires after 'mouseup'.
+    // We let the click handler check hasDragged, then it's done.
+    setTimeout(() => { this.hasDragged = false; }, 100);
   }
 
   handleDrag(e) {
     if (!this.isDragging || !this.draggingTabId) return;
+
+    this.hasDragged = true; // Mark as actual drag movement
 
     const rect = this.ui.radarContainer.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -185,6 +198,26 @@ class PopupApp {
     // Optimized Update: Direct DOM manipulation + Throttled IPC
     this.updateUiForTab(this.draggingTabId);
     this.throttledSendMessage(this.draggingTabId, newAngle);
+  }
+
+  // --- Click Logic ---
+  handleRadarBackgroundMouseDown(e) {
+    // 1. Must have a selected tab
+    if (!this.selectedTabId) return;
+
+    // 2. Move the selected tab to this position immediately
+    const rect = this.ui.radarContainer.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const newAngle = this.calculateAngleFromPosition(x, y);
+    this.tabAngles[this.selectedTabId] = newAngle;
+
+    this.updateUiForTab(this.selectedTabId);
+    this.throttledSendMessage(this.selectedTabId, newAngle);
+
+    // 3. Enter drag mode immediately
+    this.startDragging(e, this.selectedTabId);
   }
 
   // Direct DOM update to avoid full re-render

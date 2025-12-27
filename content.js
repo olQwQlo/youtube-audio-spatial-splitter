@@ -6,7 +6,9 @@ class AudioGraph {
     this.source = null;
     this.nodes = {
       stereo: null,
-      hrtf: null
+      splitter: null, // [NEW] Splits L/R for independent processing
+      hrtfL: null,    // [NEW] Virtual Left Speaker
+      hrtfR: null     // [NEW] Virtual Right Speaker
     };
     this.mode = 'stereo'; // 'stereo' | '360'
     this.videoElement = null;
@@ -69,9 +71,19 @@ class AudioGraph {
       // Create Processing Nodes
       this.nodes.stereo = this.ctx.createStereoPanner();
 
-      this.nodes.hrtf = this.ctx.createPanner();
-      this.nodes.hrtf.panningModel = 'HRTF';
-      this.nodes.hrtf.distanceModel = 'linear';
+      // [NEW] Splitter for Dual Panner implementation
+      this.nodes.splitter = this.ctx.createChannelSplitter(2);
+
+      // [NEW] Create two panners for Virtual Stereo Speakers
+      const createPanner = () => {
+        const p = this.ctx.createPanner();
+        p.panningModel = 'HRTF';
+        p.distanceModel = 'linear';
+        return p;
+      };
+
+      this.nodes.hrtfL = createPanner();
+      this.nodes.hrtfR = createPanner();
 
       // Initial Connect
       this._connectGraph();
@@ -80,7 +92,7 @@ class AudioGraph {
       this._attachLifecycleListeners(); // Attach listeners for suspend/resume
 
       this.isAttached = true;
-      console.log("[Spatial Splitter] Audio graph constructed");
+      console.log("[Spatial Splitter] Audio graph constructed (Dual Panner Ready)");
 
     } catch (e) {
       console.error("[Spatial Splitter] Setup error:", e);
@@ -111,13 +123,25 @@ class AudioGraph {
     // Disconnect all
     try { this.source.disconnect(); } catch (e) { }
     try { this.nodes.stereo.disconnect(); } catch (e) { }
-    try { this.nodes.hrtf.disconnect(); } catch (e) { }
+    try { this.nodes.splitter.disconnect(); } catch (e) { }
+    try { this.nodes.hrtfL.disconnect(); } catch (e) { }
+    try { this.nodes.hrtfR.disconnect(); } catch (e) { }
 
     // Connect based on mode
     if (this.mode === '360') {
-      this.source.connect(this.nodes.hrtf);
-      this.nodes.hrtf.connect(this.ctx.destination);
+      // Source -> Splitter -> Panner L/R -> Destination
+      // Implementation of "Virtual Stereo Speakers"
+      this.source.connect(this.nodes.splitter);
+
+      // Channel 0 (Left) -> Panner L
+      this.nodes.splitter.connect(this.nodes.hrtfL, 0);
+      // Channel 1 (Right) -> Panner R
+      this.nodes.splitter.connect(this.nodes.hrtfR, 1);
+
+      this.nodes.hrtfL.connect(this.ctx.destination);
+      this.nodes.hrtfR.connect(this.ctx.destination);
     } else {
+      // Standard Stereo Panner
       this.source.connect(this.nodes.stereo);
       this.nodes.stereo.connect(this.ctx.destination);
     }
@@ -125,24 +149,31 @@ class AudioGraph {
   }
 
   _apply360(degrees) {
-    // 0°(Front) -> x=0, z=-1 (Top view: 0 is -Z)
-    // Math 0 is +X (Right).
-    // Angle offset: -90 degrees
-    const rad = (degrees - 90) * (Math.PI / 180);
-    const x = Math.cos(rad);
-    const z = Math.sin(rad);
+    const SPREAD = 30; // Degrees. Separation between "Virtual L" and "Virtual R"
 
-    const panner = this.nodes.hrtf;
-    if (panner) {
-      const t = this.ctx.currentTime;
+    // Calculate angles for Left and Right virtual speakers
+    // L is shifted -SPREAD, R is shifted +SPREAD
+    const angleL = degrees - SPREAD;
+    const angleR = degrees + SPREAD;
+
+    const setPosition = (panner, ang) => {
+      // 0°(Front) -> x=0, z=-1 (Top view: 0 is -Z)
+      // angle offset: -90 degrees to match Math unit circle
+      const rad = (ang - 90) * (Math.PI / 180);
+      const x = Math.cos(rad);
+      const z = Math.sin(rad);
+
       if (panner.positionX) {
-        panner.positionX.setTargetAtTime(x, t, 0.1);
-        panner.positionY.setTargetAtTime(0, t, 0.1);
-        panner.positionZ.setTargetAtTime(z, t, 0.1);
+        panner.positionX.setTargetAtTime(x, this.ctx.currentTime, 0.1);
+        panner.positionY.setTargetAtTime(0, this.ctx.currentTime, 0.1);
+        panner.positionZ.setTargetAtTime(z, this.ctx.currentTime, 0.1);
       } else {
         panner.setPosition(x, 0, z);
       }
-    }
+    };
+
+    if (this.nodes.hrtfL) setPosition(this.nodes.hrtfL, angleL);
+    if (this.nodes.hrtfR) setPosition(this.nodes.hrtfR, angleR);
   }
 
   _applyStereo(degrees) {
