@@ -11,10 +11,16 @@ This extension lets you **spatially arrange** your YouTube tabs around you. Put 
 
 *   **Spatial Audio Magic**: We use the Web Audio API to place sound in 3D space. It makes distinguishing multiple audio sources surprisingly easy!
 *   **Radar Control UI**: Drag and drop your audio sources on a cool radar interface. You are the dot in the center. Configure your soundscape like a pro.
-*   **Two Audio Modes**:
-    *   **Stereo Mode**: Crisp left-right separation. Great for casual multi-tasking.
-    *   **360° Mode**: Full 3D HRTF audio. Put sounds *behind* you for maximum immersion (requires headphones for best effect).
-*   **Auto-Save**: Your perfect layout is saved automatically. Close the browser, come back, and your soundstage is ready.
+*   **Two Advanced Audio Modes**:
+    *   **Speaker Mode (🔈)**:
+        *   **Monitor Style**: Clear, unaltered audio using `EqualPower` panning.
+        *   **Rim constrained**: Audio sources snap to the outer rim of the radar.
+        *   **Best for**: Background music, News, Podcasts where clarity is key.
+    *   **Binaural Mode (🎧)**:
+        *   **Immersive Style**: Full 3D `HRTF` audio with realistic distance attenuation.
+        *   **Free Movement**: Place sounds anywhere in the radar.
+        *   **ASMR Ready**: Drag a source close to the center (you) to trigger the **Proximity Effect** — boosting bass and high-frequency details just like a real whisper in your ear. 😳
+*   **Auto-Save**: Your perfect layout is saved automatically per tab.
 
 ## 📥 How to Install
 
@@ -30,8 +36,9 @@ This isn't on the store yet (too cool for school), so you'll need to install it 
 
 1.  **Open YouTube**: Start playing videos in different tabs. The more the merrier!
 2.  **Open the Popup**: Click the extension icon.
-3.  **Drag the Dots**: Move the dots on the radar. Right goes to right ear, left goes to left ear.
-4.  **Toggle Modes**: Switch to "360°" and drag a dot *below* the center line to hear it from behind you! 🤯
+3.  **Speaker Mode (Default)**: Drag dots around the rim to balance left/right separation.
+4.  **Switch to Binaural**: Click the speaker icon (🔈) next to a video to switch to headset mode (🎧).
+5.  **Experience 3D**: in Binaural mode, drag the dot *behind* you or *right next to your center* to hear the ASMR proximity effect!
 
 ## ☕ Support the Dev
 
@@ -44,7 +51,7 @@ There's a shiny **Support button** inside the extension's popup, or you can clic
 ## 🛠️ Tech Stack
 
 *   **Manifest V3**: Bleeding edge Chrome extension tech.
-*   **Web Audio API**: `StereoPannerNode` & `PannerNode` for the audio wizardry.
+*   **Web Audio API**: `PannerNode`, `BiquadFilterNode` & `ChannelSplitter` for complex audio routing.
 *   **Vanilla JS**: No bloat, just speed.
 
 ## 🔒 Permissions

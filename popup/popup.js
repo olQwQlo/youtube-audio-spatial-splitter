@@ -4,7 +4,8 @@ class PopupApp {
   constructor() {
     // State
     this.currentTabs = [];
-    this.tabAngles = {};
+    this.tabAngles = {}; // Legacy simple map, kept for safety but tabStates is source of truth
+    this.tabStates = {}; // [NEW] { tabId: { angle, radius, mode } }
     this.selectedTabId = null;
     this.audioMode = 'stereo';
 
@@ -22,18 +23,26 @@ class PopupApp {
     };
 
     // Constants
-    this.RADAR_RADIUS = 100;
+    this.RADAR_RADIUS = 135; // Visual max radius (Container is 280px -> R=140, minus padding)
     this.CENTER_X = 140;
     this.CENTER_Y = 140;
 
     // Throttled message sender
-    this.throttledSendMessage = this.throttle((tabId, angle) => {
-      chrome.runtime.sendMessage({
-        type: "SET_ANGLE",
-        tabId: tabId,
-        angle: angle
-      });
+    this.throttledSendMessage = this.throttle((tabId) => {
+      this.sendState(tabId);
     }, 50); // 50ms throttle
+  }
+
+  sendState(tabId) {
+    if (!this.tabStates[tabId]) return;
+    const { angle, radius, mode } = this.tabStates[tabId];
+    chrome.runtime.sendMessage({
+      type: "SET_STATE", // New comprehensive message type
+      tabId: tabId,
+      angle: angle,
+      radius: radius,
+      mode: mode
+    });
   }
 
   init() {
@@ -59,8 +68,17 @@ class PopupApp {
         return;
       }
 
-      const { activeVideoTabs, tabAngles, audioMode } = response;
-      this.tabAngles = tabAngles || {};
+      const { activeVideoTabs, tabStates, audioMode } = response;
+
+      this.tabStates = tabStates || {};
+
+      // Backfill missing states
+      activeVideoTabs.forEach(tid => {
+        if (!this.tabStates[tid]) {
+          this.tabStates[tid] = { angle: 0, radius: 1.0, mode: 'speaker' };
+        }
+      });
+
       this.audioMode = audioMode || 'stereo';
       this.ui.modeToggle.checked = (this.audioMode === '360');
 
@@ -88,6 +106,26 @@ class PopupApp {
     this.render();
   }
 
+  toggleTabMode(tabId) {
+    if (!this.tabStates[tabId]) return;
+
+    const current = this.tabStates[tabId].mode;
+    const newMode = (current === 'speaker') ? 'binaural' : 'speaker';
+
+    this.tabStates[tabId].mode = newMode;
+
+    // If switching to speaker, snap to outer rim
+    if (newMode === 'speaker') {
+      this.tabStates[tabId].radius = 1.0;
+    }
+
+    this.updateUiForTab(tabId);
+    this.sendState(tabId);
+
+    // Persist config change
+    chrome.runtime.sendMessage({ type: "PERSIST_STATE" });
+  }
+
   render() {
     this.renderList();
     this.renderRadar();
@@ -102,10 +140,16 @@ class PopupApp {
     }
 
     this.currentTabs.forEach(tab => {
+      const state = this.tabStates[tab.id] || { angle: 0, radius: 1, mode: 'speaker' };
+
       const item = document.createElement('div');
       item.className = `tab-item ${this.selectedTabId === tab.id ? 'selected' : ''}`;
-      item.dataset.tabId = tab.id; // Identifier for direct update
+      item.dataset.tabId = tab.id;
       item.onclick = () => this.selectTab(tab.id);
+
+      // Wrapper for text info
+      const info = document.createElement('div');
+      info.className = 'tab-info';
 
       const title = document.createElement('div');
       title.className = 'tab-title';
@@ -114,11 +158,26 @@ class PopupApp {
 
       const meta = document.createElement('div');
       meta.className = 'tab-meta';
-      const angle = Math.round(this.tabAngles[tab.id] || 0);
+      const angle = Math.round(state.angle || 0);
       meta.textContent = `${angle}°`;
 
-      item.appendChild(title);
-      item.appendChild(meta);
+      info.appendChild(title);
+      info.appendChild(meta);
+
+      // Mode Toggle Button
+      const btn = document.createElement('button');
+      const isBinaural = state.mode === 'binaural';
+      btn.className = `mode-btn ${isBinaural ? 'binaural' : ''}`;
+      btn.textContent = isBinaural ? '🎧' : '🔈';
+      btn.title = isBinaural ? 'Binaural Mode (Immersive)' : 'Speaker Mode (Monitor)';
+
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        this.toggleTabMode(tab.id);
+      };
+
+      item.appendChild(info);
+      item.appendChild(btn);
       this.ui.tabList.appendChild(item);
     });
   }
@@ -129,13 +188,19 @@ class PopupApp {
     existingDots.forEach(dot => dot.remove());
 
     this.currentTabs.forEach(tab => {
+      const state = this.tabStates[tab.id] || { angle: 0, radius: 1, mode: 'speaker' };
+
+      // Force constraints just in case state is stale
+      if (state.mode === 'speaker' && state.radius < 0.99) {
+        state.radius = 1.0;
+      }
+
       const dot = document.createElement('div');
       dot.className = `audio-dot ${this.selectedTabId === tab.id ? 'selected' : ''}`;
-      dot.dataset.tabId = tab.id; // Identifier for direct update
-      const angleVal = this.tabAngles[tab.id] || 0;
-      dot.title = `${tab.title} (${Math.round(angleVal)}°)`;
+      dot.dataset.tabId = tab.id;
+      dot.title = `${tab.title} (${Math.round(state.angle)}°)`;
 
-      const pos = this.calculateDotPosition(angleVal);
+      const pos = this.calculateDotPosition(state.angle, state.radius);
       dot.style.left = pos.x + 'px';
       dot.style.top = pos.y + 'px';
 
@@ -185,72 +250,92 @@ class PopupApp {
 
   handleDrag(e) {
     if (!this.isDragging || !this.draggingTabId) return;
+    this.hasDragged = true;
 
-    this.hasDragged = true; // Mark as actual drag movement
-
-    const rect = this.ui.radarContainer.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    const newAngle = this.calculateAngleFromPosition(x, y);
-    this.tabAngles[this.draggingTabId] = newAngle;
-
-    // Optimized Update: Direct DOM manipulation + Throttled IPC
-    this.updateUiForTab(this.draggingTabId);
-    this.throttledSendMessage(this.draggingTabId, newAngle);
+    this._updatePositionFromEvent(e, this.draggingTabId);
   }
 
   // --- Click Logic ---
   handleRadarBackgroundMouseDown(e) {
-    // 1. Must have a selected tab
     if (!this.selectedTabId) return;
 
-    // 2. Move the selected tab to this position immediately
+    // Move & Start Drag
+    this._updatePositionFromEvent(e, this.selectedTabId);
+    this.startDragging(e, this.selectedTabId);
+  }
+
+  // Shared logic for calculating position from mouse event
+  _updatePositionFromEvent(e, tabId) {
+    if (!this.tabStates[tabId]) this.tabStates[tabId] = { angle: 0, radius: 1, mode: 'speaker' };
+
     const rect = this.ui.radarContainer.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
+    // Angle
     const newAngle = this.calculateAngleFromPosition(x, y);
-    this.tabAngles[this.selectedTabId] = newAngle;
 
-    this.updateUiForTab(this.selectedTabId);
-    this.throttledSendMessage(this.selectedTabId, newAngle);
+    // Radius
+    const dx = x - this.CENTER_X;
+    const dy = y - this.CENTER_Y;
+    let dist = Math.sqrt(dx * dx + dy * dy) / this.RADAR_RADIUS;
+    if (dist > 1) dist = 1; // Clamp max
 
-    // 3. Enter drag mode immediately
-    this.startDragging(e, this.selectedTabId);
+    // Constraints
+    const mode = this.tabStates[tabId].mode;
+    if (mode === 'speaker') {
+      dist = 1.0; // Force outer rim
+    }
+
+    // Update State
+    this.tabStates[tabId].angle = newAngle;
+    this.tabStates[tabId].radius = dist;
+
+    // Update UI & Send
+    this.updateUiForTab(tabId);
+    this.throttledSendMessage(tabId);
   }
 
   // Direct DOM update to avoid full re-render
   updateUiForTab(tabId) {
-    const angle = this.tabAngles[tabId] || 0;
+    const state = this.tabStates[tabId];
+    if (!state) return;
 
-    // 1. Update List Item Text
-    const listItem = this.ui.tabList.querySelector(`.tab-item[data-tab-id="${tabId}"] .tab-meta`);
+    // 1. Update List Item
+    const listItem = this.ui.tabList.querySelector(`.tab-item[data-tab-id="${tabId}"]`);
     if (listItem) {
-      listItem.textContent = `${Math.round(angle)}°`;
+      const meta = listItem.querySelector('.tab-meta');
+      if (meta) meta.textContent = `${Math.round(state.angle)}°`;
+
+      const btn = listItem.querySelector('.mode-btn');
+      if (btn) {
+        const isBinaural = state.mode === 'binaural';
+        btn.className = `mode-btn ${isBinaural ? 'binaural' : ''}`;
+        btn.textContent = isBinaural ? '🎧' : '🔈';
+        btn.title = isBinaural ? 'Binaural Mode (Immersive)' : 'Speaker Mode (Monitor)';
+      }
     }
 
     // 2. Update Radar Dot Position
     const dot = this.ui.radarContainer.querySelector(`.audio-dot[data-tab-id="${tabId}"]`);
     if (dot) {
-      const pos = this.calculateDotPosition(angle);
+      const pos = this.calculateDotPosition(state.angle, state.radius);
       dot.style.left = pos.x + 'px';
       dot.style.top = pos.y + 'px';
-      // Update title tooltips if needed, but maybe skipping for perf is fine?
-      // dot.title = ... (Accessing tab title requires lookup, maybe skip for drag perf)
     }
   }
 
   // --- Math ---
 
-  calculateDotPosition(angleDeg) {
+  calculateDotPosition(angleDeg, radius = 1.0) {
     // 0 degrees is UP (Front).
     // -90 is Left, 90 is Right.
     // In Math/Canvas: 0 is Right (3 o'clock), -90 is Top (12 o'clock).
     // So: MathAngle = AngleDeg - 90
     const mathAngleRad = (angleDeg - 90) * (Math.PI / 180);
-    const x = this.CENTER_X + this.RADAR_RADIUS * Math.cos(mathAngleRad);
-    const y = this.CENTER_Y + this.RADAR_RADIUS * Math.sin(mathAngleRad);
+    const r = this.RADAR_RADIUS * radius;
+    const x = this.CENTER_X + r * Math.cos(mathAngleRad);
+    const y = this.CENTER_Y + r * Math.sin(mathAngleRad);
     return { x, y };
   }
 

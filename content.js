@@ -6,11 +6,14 @@ class AudioGraph {
     this.source = null;
     this.nodes = {
       stereo: null,
-      splitter: null, // [NEW] Splits L/R for independent processing
-      hrtfL: null,    // [NEW] Virtual Left Speaker
-      hrtfR: null     // [NEW] Virtual Right Speaker
+      splitter: null,
+      hrtfL: null,
+      hrtfR: null,
+      lowShelf: null,  // [NEW] ASMR Bass
+      highShelf: null  // [NEW] ASMR Detail
     };
-    this.mode = 'stereo'; // 'stereo' | '360'
+    this.mode = 'stereo'; // Global: 'stereo' | '360'
+    this.panningMode = 'HRTF'; // Tab-specific: 'HRTF' (Binaural) | 'equalpower' (Speaker)
     this.videoElement = null;
     this.isAttached = false;
   }
@@ -71,6 +74,17 @@ class AudioGraph {
       // Create Processing Nodes
       this.nodes.stereo = this.ctx.createStereoPanner();
 
+      // [NEW] ASMR Filters
+      this.nodes.lowShelf = this.ctx.createBiquadFilter();
+      this.nodes.lowShelf.type = 'lowshelf';
+      this.nodes.lowShelf.frequency.value = 150;
+      this.nodes.lowShelf.gain.value = 0;
+
+      this.nodes.highShelf = this.ctx.createBiquadFilter();
+      this.nodes.highShelf.type = 'highshelf';
+      this.nodes.highShelf.frequency.value = 5000;
+      this.nodes.highShelf.gain.value = 0;
+
       // [NEW] Splitter for Dual Panner implementation
       this.nodes.splitter = this.ctx.createChannelSplitter(2);
 
@@ -78,7 +92,10 @@ class AudioGraph {
       const createPanner = () => {
         const p = this.ctx.createPanner();
         p.panningModel = 'HRTF';
-        p.distanceModel = 'linear';
+        p.distanceModel = 'inverse';
+        p.refDistance = 1;
+        p.maxDistance = 10000;
+        p.rolloffFactor = 1;
         return p;
       };
 
@@ -105,16 +122,80 @@ class AudioGraph {
     this._connectGraph();
   }
 
-  applyAngle(degrees) {
+  // [NEW] Apply rich state
+  applyState(degrees, radius, panningMode) {
     if (!this.ctx) return;
 
-    // console.debug(`[AudioGraph] Angle: ${degrees} Mode: ${this.mode}`);
+    // Update Panning Mode if changed (Speaker vs Binaural)
+    if (panningMode && this.panningMode !== panningMode) {
+      this.panningMode = panningMode;
+      this._updatePannerAttributes();
+    }
+
+    // [NEW] Binaural ASMR Effect
+    if (this.mode === '360' && this.panningMode === 'HRTF') {
+      this._applyAsmrEffect(radius);
+    } else {
+      this._resetAsmrEffect();
+    }
 
     if (this.mode === '360') {
-      this._apply360(degrees);
+      this._apply360(degrees, radius);
     } else {
       this._applyStereo(degrees);
     }
+  }
+
+  // [NEW] Proximity EQ
+  _applyAsmrEffect(radius) {
+    const THRESHOLD = 0.4; // Effect starts when closer than 40%
+
+    if (radius < THRESHOLD) {
+      const intensity = 1.0 - (radius / THRESHOLD);
+
+      // Boost parameters
+      const lowGain = intensity * 6; // +6dB max
+      const highGain = intensity * 4; // +4dB max
+
+      const t = this.ctx.currentTime + 0.1;
+      if (this.nodes.lowShelf) this.nodes.lowShelf.gain.setTargetAtTime(lowGain, t, 0.1);
+      if (this.nodes.highShelf) this.nodes.highShelf.gain.setTargetAtTime(highGain, t, 0.1);
+    } else {
+      this._resetAsmrEffect();
+    }
+  }
+
+  _resetAsmrEffect() {
+    if (this.nodes.lowShelf && this.nodes.highShelf) {
+      const t = this.ctx.currentTime + 0.1;
+      this.nodes.lowShelf.gain.setTargetAtTime(0, t, 0.1);
+      this.nodes.highShelf.gain.setTargetAtTime(0, t, 0.1);
+    }
+  }
+
+  _updatePannerAttributes() {
+    const panners = [this.nodes.hrtfL, this.nodes.hrtfR];
+    const isSpeaker = (this.panningMode === 'speaker');
+
+    // Map 'speaker' -> 'equalpower', 'binaural' -> 'HRTF'
+    const model = isSpeaker ? 'equalpower' : 'HRTF';
+
+    panners.forEach(p => {
+      if (!p) return;
+      if (p.panningModel !== model) p.panningModel = model;
+
+      if (isSpeaker) {
+        // Speaker: No attenuation
+        p.distanceModel = 'inverse';
+        p.refDistance = 10000;
+        p.rolloffFactor = 1;
+      } else {
+        // Binaural: Sharp proximity effect
+        p.distanceModel = 'inverse';
+        p.refDistance = 0.5; // Closer ref distance for intimacy
+        p.rolloffFactor = 2; // sharper falloff
+      }
+    });
   }
 
   _connectGraph() {
@@ -124,44 +205,43 @@ class AudioGraph {
     try { this.source.disconnect(); } catch (e) { }
     try { this.nodes.stereo.disconnect(); } catch (e) { }
     try { this.nodes.splitter.disconnect(); } catch (e) { }
+    try { this.nodes.lowShelf.disconnect(); } catch (e) { }
+    try { this.nodes.highShelf.disconnect(); } catch (e) { }
     try { this.nodes.hrtfL.disconnect(); } catch (e) { }
     try { this.nodes.hrtfR.disconnect(); } catch (e) { }
 
     // Connect based on mode
     if (this.mode === '360') {
-      // Source -> Splitter -> Panner L/R -> Destination
-      // Implementation of "Virtual Stereo Speakers"
-      this.source.connect(this.nodes.splitter);
+      // Source -> LowShelf -> HighShelf -> Splitter -> Panners
+      this.source.connect(this.nodes.lowShelf);
+      this.nodes.lowShelf.connect(this.nodes.highShelf);
+      this.nodes.highShelf.connect(this.nodes.splitter);
 
-      // Channel 0 (Left) -> Panner L
       this.nodes.splitter.connect(this.nodes.hrtfL, 0);
-      // Channel 1 (Right) -> Panner R
       this.nodes.splitter.connect(this.nodes.hrtfR, 1);
-
       this.nodes.hrtfL.connect(this.ctx.destination);
       this.nodes.hrtfR.connect(this.ctx.destination);
+
+      // Ensure attributes are correct for current panningMode
+      this._updatePannerAttributes();
     } else {
-      // Standard Stereo Panner
       this.source.connect(this.nodes.stereo);
       this.nodes.stereo.connect(this.ctx.destination);
     }
-    console.log(`[Spatial Splitter] Switched to ${this.mode} mode`);
+    console.log(`[Spatial Splitter] Global Mode: ${this.mode}`);
   }
 
-  _apply360(degrees) {
-    const SPREAD = 30; // Degrees. Separation between "Virtual L" and "Virtual R"
+  _apply360(degrees, radius = 1.0) {
+    const SPREAD = 45; // Wider spread for better separation
 
-    // Calculate angles for Left and Right virtual speakers
-    // L is shifted -SPREAD, R is shifted +SPREAD
     const angleL = degrees - SPREAD;
     const angleR = degrees + SPREAD;
 
-    const setPosition = (panner, ang) => {
-      // 0°(Front) -> x=0, z=-1 (Top view: 0 is -Z)
-      // angle offset: -90 degrees to match Math unit circle
+    const setPosition = (panner, ang, r) => {
+      // 0°(Front) -> x=0, z=-1
       const rad = (ang - 90) * (Math.PI / 180);
-      const x = Math.cos(rad);
-      const z = Math.sin(rad);
+      const x = r * Math.cos(rad);
+      const z = r * Math.sin(rad);
 
       if (panner.positionX) {
         panner.positionX.setTargetAtTime(x, this.ctx.currentTime, 0.1);
@@ -172,8 +252,8 @@ class AudioGraph {
       }
     };
 
-    if (this.nodes.hrtfL) setPosition(this.nodes.hrtfL, angleL);
-    if (this.nodes.hrtfR) setPosition(this.nodes.hrtfR, angleR);
+    if (this.nodes.hrtfL) setPosition(this.nodes.hrtfL, angleL, radius);
+    if (this.nodes.hrtfR) setPosition(this.nodes.hrtfR, angleR, radius);
   }
 
   _applyStereo(degrees) {
@@ -212,13 +292,28 @@ function scanForVideo() {
 }
 
 // Messages
+// Messages
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "APPLY_STATE") {
-    if (message.mode) {
+    // 1. Update Global Mode (Stereo/360)
+    if (message.globalMode) {
+      audioGraph.setMode(message.globalMode);
+    } else if (message.mode && (message.mode === 'stereo' || message.mode === '360')) {
+      // Legacy fallback if 'mode' contains global mode
       audioGraph.setMode(message.mode);
     }
-    if (typeof message.angle === 'number') {
-      audioGraph.applyAngle(message.angle);
+
+    // 2. Update Tab State & Audio
+    // message.mode might be 'speaker'/'binaural' now
+    // We treat 'message.mode' as panningMode if it is speaker/binaural
+    let panningMode = null;
+    if (message.mode === 'speaker' || message.mode === 'binaural') {
+      panningMode = message.mode;
     }
+
+    const radius = (typeof message.radius === 'number') ? message.radius : 1.0;
+    const angle = (typeof message.angle === 'number') ? message.angle : 0;
+
+    audioGraph.applyState(angle, radius, panningMode);
   }
 });
